@@ -1,0 +1,12 @@
+node_modules
+dist
+client/node_modules
+client/dist
+server/node_modules
+server/dist
+.env
+client/.env
+server/.env
+*.log
+__docx
+Quan_ly_chi_tieu.zip
