@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { FilterQuery, Types } from 'mongoose';
+import { FilterQuery, PipelineStage, Types } from 'mongoose';
 import Transaction, { ITransaction } from '../models/Transaction';
 import Wallet from '../models/Wallet';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -55,29 +55,6 @@ export const getSummaryReport = async (
     0
   );
 
-  if (fromDate) {
-    const beforeMatch: FilterQuery<ITransaction> = {
-      userId,
-      occurredAt: { $lt: fromDate }
-    };
-    if (walletId) {
-      beforeMatch.walletId = toObjectId(String(walletId));
-    }
-
-    const beforeTotals = await Transaction.aggregate([
-      { $match: beforeMatch },
-      { $group: { _id: '$type', total: { $sum: '$amount' } } }
-    ]);
-
-    for (const entry of beforeTotals) {
-      if (entry._id === 'income') {
-        openingBalance += entry.total;
-      } else if (entry._id === 'expense') {
-        openingBalance -= entry.total;
-      }
-    }
-  }
-
   const match: FilterQuery<ITransaction> = {
     userId
   };
@@ -86,27 +63,75 @@ export const getSummaryReport = async (
     match.walletId = toObjectId(String(walletId));
   }
 
-  if (fromDate || toDate) {
-    match.occurredAt = {};
-    if (fromDate) match.occurredAt.$gte = fromDate;
-    if (toDate) match.occurredAt.$lte = toDate;
+  if (toDate) {
+    match.occurredAt = { $lte: toDate };
   }
 
-  const grouped = await Transaction.aggregate([
+  const buildRangeCondition = (type: 'income' | 'expense') => {
+    const conditions: Record<string, unknown>[] = [{ $eq: ['$type', type] }];
+    if (fromDate) {
+      conditions.push({ $gte: ['$occurredAt', fromDate] });
+    }
+    if (toDate) {
+      conditions.push({ $lte: ['$occurredAt', toDate] });
+    }
+    if (conditions.length === 1) {
+      return conditions[0];
+    }
+    return { $and: conditions };
+  };
+
+  const buildBeforeCondition = (type: 'income' | 'expense') => {
+    if (!fromDate) {
+      return { $literal: false };
+    }
+    return {
+      $and: [{ $eq: ['$type', type] }, { $lt: ['$occurredAt', fromDate] }]
+    };
+  };
+
+  const pipeline: PipelineStage[] = [
     { $match: match },
     {
       $group: {
-        _id: '$type',
-        total: { $sum: '$amount' }
+        _id: null,
+        totalIncome: {
+          $sum: {
+            $cond: [buildRangeCondition('income'), '$amount', 0]
+          }
+        },
+        totalExpense: {
+          $sum: {
+            $cond: [buildRangeCondition('expense'), '$amount', 0]
+          }
+        },
+        beforeIncome: {
+          $sum: {
+            $cond: [buildBeforeCondition('income'), '$amount', 0]
+          }
+        },
+        beforeExpense: {
+          $sum: {
+            $cond: [buildBeforeCondition('expense'), '$amount', 0]
+          }
+        }
       }
     }
-  ]);
+  ];
 
-  let totalIncome = 0;
-  let totalExpense = 0;
-  for (const row of grouped) {
-    if (row._id === 'income') totalIncome = row.total;
-    if (row._id === 'expense') totalExpense = row.total;
+  const [aggregated] = await Transaction.aggregate<{
+    totalIncome?: number;
+    totalExpense?: number;
+    beforeIncome?: number;
+    beforeExpense?: number;
+  }>(pipeline);
+
+  const totalIncome = aggregated?.totalIncome ?? 0;
+  const totalExpense = aggregated?.totalExpense ?? 0;
+
+  if (fromDate && aggregated) {
+    openingBalance +=
+      (aggregated.beforeIncome ?? 0) - (aggregated.beforeExpense ?? 0);
   }
 
   const closingBalance = openingBalance + totalIncome - totalExpense;

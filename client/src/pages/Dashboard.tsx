@@ -1,28 +1,11 @@
 import {
   BankOutlined,
   LogoutOutlined,
-  PlusOutlined,
   WalletOutlined
 } from '@ant-design/icons';
-import {
-  Button,
-  Card,
-  DatePicker,
-  Dropdown,
-  Form,
-  Input,
-  Layout,
-  Menu,
-  Modal,
-  Select,
-  Statistic,
-  Table,
-  Tag,
-  Typography,
-  message
-} from 'antd';
+import { Button, Dropdown, Form, Layout, Menu, message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createTransactionRequest,
@@ -34,23 +17,18 @@ import {
 } from '../api';
 import type { Transaction, TransactionType, Wallet } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import {
-  Bar,
-  BarChart,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from 'recharts';
+import SummaryCards from '../components/dashboard/SummaryCards';
+import ReportFiltersCard from '../components/dashboard/ReportFiltersCard';
+import SummaryChartCard from '../components/dashboard/SummaryChartCard';
+import WalletListCard from '../components/dashboard/WalletListCard';
+import TransactionsTableCard from '../components/dashboard/TransactionsTableCard';
+import CreateWalletModal from '../components/dashboard/CreateWalletModal';
+import TransactionModal from '../components/dashboard/TransactionModal';
 
-const { Text } = Typography;
 const { Header, Sider, Content } = Layout;
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
-  const showEmail =
-    user?.email && !user.email.toLowerCase().endsWith('@local.dev');
   const [collapsed, setCollapsed] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
@@ -148,6 +126,13 @@ const Dashboard = () => {
     setTransactionModalOpen(false);
   };
 
+  const handleDeleteTransaction = useCallback(
+    (transactionId: string) => {
+      deleteTransactionMutation.mutate(transactionId);
+    },
+    [deleteTransactionMutation]
+  );
+
   const wallets: Wallet[] = walletQuery.data || [];
   const transactions: Transaction[] = transactionsQuery.data || [];
   const summary = summaryQuery.data;
@@ -159,59 +144,6 @@ const Dashboard = () => {
     ],
     [summary]
   );
-
-  const columns = [
-    {
-      title: 'Ngày',
-      dataIndex: 'occurredAt',
-      render: (value: string) => dayjs(value).format('DD/MM/YYYY')
-    },
-    {
-      title: 'Ví',
-      dataIndex: 'walletId',
-      render: (value: string) =>
-        wallets.find((wallet) => wallet._id === value)?.name || 'N/A'
-    },
-    {
-      title: 'Loại',
-      dataIndex: 'type',
-      render: (value: TransactionType) => (
-        <Tag color={value === 'income' ? 'green' : 'volcano'}>
-          {value === 'income' ? 'Thu' : 'Chi'}
-        </Tag>
-      )
-    },
-    {
-      title: 'Danh mục',
-      dataIndex: 'category'
-    },
-    {
-      title: 'Số tiền',
-      dataIndex: 'amount',
-      render: (value: number, record: Transaction) => (
-        <Text strong type={record.type === 'income' ? 'success' : 'danger'}>
-          {record.type === 'income' ? '+' : '-'}
-          {value.toLocaleString('vi-VN')}
-        </Text>
-      )
-    },
-    {
-      title: 'Ghi chú',
-      dataIndex: 'note'
-    },
-    {
-      title: '',
-      render: (_: unknown, record: Transaction) => (
-        <Button
-          type="link"
-          danger
-          onClick={() => deleteTransactionMutation.mutate(record._id)}
-        >
-          Xoá
-        </Button>
-      )
-    }
-  ];
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -258,262 +190,70 @@ const Dashboard = () => {
           <div className="container-fluid py-3">
             <div className="row g-3">
               <div className="col-12">
-                <Card className="dashboard-card card-animate">
-                  <div className="row g-3 text-center text-md-start">
-                    <div className="col-12 col-md-4">
-                      <Statistic
-                        title="Số dư đầu kỳ"
-                        prefix="₫"
-                        value={summary?.openingBalance || 0}
-                      />
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <Statistic
-                        title="Tổng thu"
-                        value={summary?.totalIncome || 0}
-                        valueStyle={{ color: '#3f8600' }}
-                      />
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <Statistic
-                        title="Tổng chi"
-                        value={summary?.totalExpense || 0}
-                        valueStyle={{ color: '#cf1322' }}
-                      />
-                    </div>
-                  </div>
-                </Card>
+                <SummaryCards
+                  summary={summary}
+                  loading={summaryQuery.isLoading}
+                />
               </div>
 
               <div className="col-12">
-                <Card
-                  className="dashboard-card card-animate delay-1"
-                  title="Bộ lọc báo cáo"
-                  extra={
-                    <div className="d-flex flex-wrap gap-2">
-                      <Button onClick={() => setWalletModalOpen(true)}>
-                        Tạo ví
-                      </Button>
-                      <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => setTransactionModalOpen(true)}
-                        disabled={!wallets.length}
-                      >
-                        Ghi giao dịch
-                      </Button>
-                    </div>
-                  }
-                >
-                  <div className="row g-3">
-                    <div className="col-12 col-md-4">
-                      <Select
-                        allowClear
-                        style={{ width: '100%' }}
-                        placeholder="Chọn ví"
-                        value={walletFilter}
-                        onChange={(val) => setWalletFilter(val)}
-                        options={wallets.map((wallet) => ({
-                          value: wallet._id,
-                          label: wallet.name
-                        }))}
-                      />
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <Select
-                        allowClear
-                        placeholder="Loại giao dịch"
-                        style={{ width: '100%' }}
-                        value={typeFilter}
-                        onChange={(val) => setTypeFilter(val)}
-                        options={[
-                          { value: 'income', label: 'Thu' },
-                          { value: 'expense', label: 'Chi' }
-                        ]}
-                      />
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <DatePicker.RangePicker
-                        style={{ width: '100%' }}
-                        value={dateRange}
-                        onChange={(range) =>
-                          setDateRange(
-                            range
-                              ? (range as [Dayjs | null, Dayjs | null])
-                              : [null, null]
-                          )
-                        }
-                        format="DD/MM/YYYY"
-                      />
-                    </div>
-                  </div>
-                </Card>
+                <ReportFiltersCard
+                  wallets={wallets}
+                  walletFilter={walletFilter}
+                  typeFilter={typeFilter}
+                  dateRange={dateRange}
+                  onWalletChange={(value) => setWalletFilter(value)}
+                  onTypeChange={(value) => setTypeFilter(value)}
+                  onDateChange={(range) => setDateRange(range)}
+                  onCreateWallet={() => setWalletModalOpen(true)}
+                  onAddTransaction={() => setTransactionModalOpen(true)}
+                  disableAddTransaction={!wallets.length}
+                  walletLoading={walletQuery.isLoading}
+                />
               </div>
 
               <div className="col-12 col-lg-6">
-                <Card
-                  title="Sức khoẻ tài chính"
-                  className="dashboard-card card-animate delay-2"
-                >
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart
-                      data={chartData}
-                      margin={{ top: 16, right: 16, bottom: 0, left: 0 }}
-                    >
-                      <XAxis dataKey="label" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="value" fill="#4096ff" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
+                <SummaryChartCard
+                  data={chartData}
+                  loading={summaryQuery.isLoading}
+                />
               </div>
               <div className="col-12 col-lg-6">
-                <Card
-                  title="Ví của bạn"
-                  className="dashboard-card card-animate delay-3"
-                >
-                  {wallets.map((wallet) => (
-                    <Card
-                      key={wallet._id}
-                      size="small"
-                      className="mb-3 wallet-card card-animate-sm"
-                      title={wallet.name}
-                      extra={wallet.currency}
-                    >
-                      <div className="d-flex flex-column gap-1">
-                        <Text>Số TK: {wallet.accountNumber}</Text>
-                        <Text>
-                          Số dư hiện tại:{' '}
-                          <Text strong>
-                            {wallet.balance.toLocaleString('vi-VN')}
-                          </Text>
-                        </Text>
-                      </div>
-                    </Card>
-                  ))}
-                  {!wallets.length && (
-                    <Text type="secondary">
-                      Chưa có ví nào, hãy tạo ví mới để bắt đầu.
-                    </Text>
-                  )}
-                </Card>
+                <WalletListCard
+                  wallets={wallets}
+                  loading={walletQuery.isLoading}
+                />
               </div>
 
               <div className="col-12">
-                <Card
-                  title="Lịch sử giao dịch"
-                  className="dashboard-card card-animate delay-4"
-                >
-                  <Table
-                    dataSource={transactions}
-                    loading={transactionsQuery.isLoading}
-                    columns={columns}
-                    rowKey="_id"
-                  />
-                </Card>
+                <TransactionsTableCard
+                  transactions={transactions}
+                  wallets={wallets}
+                  loading={transactionsQuery.isLoading}
+                  onDelete={handleDeleteTransaction}
+                />
               </div>
             </div>
           </div>
         </Content>
       </Layout>
 
-      <Modal
-        title="Tạo ví mới"
+      <CreateWalletModal
+        form={walletForm}
         open={walletModalOpen}
-        onOk={handleWalletSubmit}
+        loading={createWalletMutation.isPending}
+        onSubmit={handleWalletSubmit}
         onCancel={() => setWalletModalOpen(false)}
-        confirmLoading={createWalletMutation.isPending}
-      >
-        <Form layout="vertical" form={walletForm}>
-          <Form.Item
-            label="Tên ví"
-            name="name"
-            rules={[{ required: true, message: 'Nhập tên ví' }]}
-          >
-            <Input placeholder="Ví tiền mặt" />
-          </Form.Item>
-          <Form.Item
-            label="Số tài khoản"
-            name="accountNumber"
-            rules={[{ required: true, message: 'Nhập số tài khoản' }]}
-          >
-            <Input placeholder="123-456" />
-          </Form.Item>
-          <Form.Item
-            label="Số dư ban đầu"
-            name="initialBalance"
-            initialValue={0}
-            rules={[{ required: true, message: 'Nhập số dư ban đầu' }]}
-          >
-            <Input type="number" min={0} />
-          </Form.Item>
-          <Form.Item label="Tiền tệ" name="currency" initialValue="VND">
-            <Select
-              options={[
-                { value: 'VND', label: 'VND' },
-                { value: 'USD', label: 'USD' }
-              ]}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+      />
 
-      <Modal
-        title="Ghi giao dịch"
+      <TransactionModal
+        form={transactionForm}
+        wallets={wallets}
         open={transactionModalOpen}
-        onOk={handleTransactionSubmit}
+        loading={createTransactionMutation.isPending}
+        onSubmit={handleTransactionSubmit}
         onCancel={() => setTransactionModalOpen(false)}
-        confirmLoading={createTransactionMutation.isPending}
-      >
-        <Form layout="vertical" form={transactionForm}>
-          <Form.Item
-            label="Ví"
-            name="walletId"
-            rules={[{ required: true, message: 'Chọn ví' }]}
-          >
-            <Select
-              options={wallets.map((wallet) => ({
-                value: wallet._id,
-                label: wallet.name
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            label="Loại"
-            name="type"
-            rules={[{ required: true, message: 'Chọn loại' }]}
-          >
-            <Select
-              options={[
-                { value: 'income', label: 'Thu' },
-                { value: 'expense', label: 'Chi' }
-              ]}
-            />
-          </Form.Item>
-          <Form.Item
-            label="Số tiền"
-            name="amount"
-            rules={[{ required: true, message: 'Nhập số tiền' }]}
-          >
-            <Input type="number" min={0} />
-          </Form.Item>
-          <Form.Item
-            label="Danh mục"
-            name="category"
-            rules={[{ required: true, message: 'Nhập danh mục' }]}
-          >
-            <Input placeholder="Ăn uống, Lương..." />
-          </Form.Item>
-          <Form.Item label="Ngày" name="occurredAt" initialValue={dayjs()}>
-            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
-          </Form.Item>
-          <Form.Item label="Ghi chú" name="note">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      />
     </Layout>
   );
 };
