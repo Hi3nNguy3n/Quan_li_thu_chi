@@ -1,25 +1,14 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState
-} from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { loginWithGoogle, fetchProfile } from '../api';
 import { setAccessToken } from '../api/client';
+import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { User } from '../types';
 
-interface AuthContextValue {
-  user: User | null;
-  token: string | null;
-  loading: boolean;
-  login: (idToken: string) => Promise<void>;
-  logout: () => void;
+interface AuthProviderProps {
+  children: ReactNode;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(() => {
     if (typeof window === 'undefined') return null;
     const cached = localStorage.getItem('qlct_user');
@@ -30,27 +19,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return localStorage.getItem('qlct_token');
   });
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setAccessToken(token);
-    const bootstrap = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const profile = await fetchProfile();
-        setUser(profile);
-        localStorage.setItem('qlct_user', JSON.stringify(profile));
-      } catch (error) {
-        console.error(error);
-        handleLogout();
-      } finally {
-        setLoading(false);
-      }
-    };
-    bootstrap();
-  }, [token]);
 
   const handleLogout = useCallback(() => {
     setToken(null);
@@ -79,6 +47,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     []
   );
 
+  useEffect(() => {
+    setAccessToken(token);
+    const bootstrap = async () => {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const profile = await fetchProfile();
+        setUser(profile);
+        localStorage.setItem('qlct_user', JSON.stringify(profile));
+      } catch (error) {
+        console.error(error);
+        handleLogout();
+      } finally {
+        setLoading(false);
+      }
+    };
+    bootstrap();
+  }, [token, handleLogout]);
+
   const value: AuthContextValue = {
     user,
     token,
@@ -88,12 +77,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used inside AuthProvider');
-  }
-  return ctx;
 };

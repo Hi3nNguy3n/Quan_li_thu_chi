@@ -17,12 +17,12 @@ export const requireAuth = (
 ) => {
   const header = req.headers.authorization;
   if (!header) {
-    return res.status(401).json({ message: 'Thiếu access token' });
+    return res.status(401).json({ message: 'Thi���u access token' });
   }
 
   const [, token] = header.split(' ');
   if (!token) {
-    return res.status(401).json({ message: 'Token không hợp lệ' });
+    return res.status(401).json({ message: 'Token khA\'ng h���p l���' });
   }
 
   try {
@@ -34,6 +34,7 @@ export const requireAuth = (
     req.user = payload;
     return next();
   } catch (error) {
-    return res.status(401).json({ message: 'Token không hợp lệ' });
+    console.error('Invalid access token', error);
+    return res.status(401).json({ message: 'Token khA\'ng h���p l���' });
   }
 };

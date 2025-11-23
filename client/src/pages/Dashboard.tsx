@@ -1,3 +1,4 @@
+import type { AxiosError } from 'axios';
 import {
   BankOutlined,
   LogoutOutlined,
@@ -16,7 +17,7 @@ import {
   fetchWallets
 } from '../api';
 import type { Transaction, TransactionType, Wallet } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import SummaryCards from '../components/dashboard/SummaryCards';
 import ReportFiltersCard from '../components/dashboard/ReportFiltersCard';
 import SummaryChartCard from '../components/dashboard/SummaryChartCard';
@@ -86,7 +87,7 @@ const Dashboard = () => {
       queryClient.invalidateQueries({ queryKey: ['summary'] });
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
     },
-    onError: (error: any) =>
+    onError: (error: AxiosError<{ message?: string }>) =>
       message.error(error?.response?.data?.message || 'Không thể ghi nhận')
   });
 
